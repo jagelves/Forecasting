@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forecast Scoreboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: one working column — upload → section tabs → outcomes → results summary → detail */
+:root{
+  --bg:#f6f7f4; --surface:#ffffff; --fg:#1c2420; --muted:#5d6a63; --line:#dde2dc;
+  --accent:#17583f; --accent-soft:#e3eee8; --gold:#9a7417; --gold-soft:#f5edd8;
+  --yes:#17583f; --no:#9b3b2e; --no-soft:#f6e4e0; --bar1:#8fa69a; --bar2:#5f8f78; --bar3:#17583f; --barc:#b8902a;
+  --f-display:"Fraunces",Georgia,serif; --f-body:"Public Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121715; --surface:#1a211e; --fg:#e6ebe7; --muted:#9aa8a0; --line:#2c3632;
+  --accent:#6cc39a; --accent-soft:#1f3329; --gold:#d9b25a; --gold-soft:#33291a;
+  --yes:#6cc39a; --no:#e88a7b; --no-soft:#3a2420; --bar1:#5d7268; --bar2:#4f9a78; --bar3:#6cc39a; --barc:#d9b25a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121715; --surface:#1a211e; --fg:#e6ebe7; --muted:#9aa8a0; --line:#2c3632;
+  --accent:#6cc39a; --accent-soft:#1f3329; --gold:#d9b25a; --gold-soft:#33291a;
+  --yes:#6cc39a; --no:#e88a7b; --no-soft:#3a2420; --bar1:#5d7268; --bar2:#4f9a78; --bar3:#6cc39a; --barc:#d9b25a; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px;display:flex;flex-direction:column;gap:28px}
+h1{font-family:var(--f-display);font-weight:600;font-size:2rem;margin:0;text-wrap:balance}
+h2{font-size:1.05rem;margin:0;font-weight:700}
+.sub{color:var(--muted);margin:4px 0 0;max-width:68ch}
+.eyebrow{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+section{display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:7px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,label.btn:focus-within,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--surface);border-color:var(--accent);font-weight:600}
+input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+textarea{width:100%;min-height:110px;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:8px}
+.muted{color:var(--muted)} .small{font-size:.85rem}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;padding:9px 16px;margin-bottom:-1px;color:var(--muted);font-weight:600}
+.tab[aria-selected="true"]{background:var(--surface);border-color:var(--line);color:var(--fg)}
+.tab .n{font-family:var(--f-mono);font-weight:400;font-size:.8rem;margin-left:6px;color:var(--muted)}
+.outcomes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.oc{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface)}
+.oc .q{min-width:0;font-size:.88rem}
+.oc .q b{font-family:var(--f-mono);font-weight:500;color:var(--muted);margin-right:6px}
+.oc .note{font-size:.8rem;color:var(--muted);text-align:right;flex:none}
+.seg{display:flex;flex:none;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:5px 10px;font-size:.82rem;background:transparent}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"].y{background:var(--accent-soft);color:var(--yes);font-weight:700}
+.seg button[aria-pressed="true"].n{background:var(--no-soft);color:var(--no);font-weight:700}
+.seg button[aria-pressed="true"].u{background:var(--bg);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:4px}
+.tile .v{font-family:var(--f-mono);font-size:1.7rem;font-variant-numeric:tabular-nums}
+.tile .k{font-size:.82rem;font-weight:600}
+.tile .d{font-size:.78rem;color:var(--muted)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.gaps{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.gap{border-left:3px solid var(--gold);padding:4px 12px}
+.gap .v{font-family:var(--f-mono);font-size:1.25rem}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:var(--bg)}
+td.l,th.l{text-align:left;white-space:normal;min-width:170px}
+td.num{font-family:var(--f-mono)}
+tr:last-child td{border-bottom:0}
+.best{color:var(--accent);font-weight:700}
+.res-y{color:var(--yes);font-weight:700}.res-n{color:var(--no);font-weight:700}.res-v{color:var(--gold);font-weight:600}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.two>div{min-width:0}
+svg text{fill:var(--fg);font-family:var(--f-body)}
+.empty{padding:28px 16px;color:var(--muted);text-align:center}
+.err{color:var(--no)}
+@media (prefers-reduced-motion:no-preference){button{transition:border-color .15s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">BUAD 5032 · Prediction exercise · Nov 2–8, 2026</div>
+    <h1>Forecast Scoreboard</h1>
+    <p class="sub">Upload the Qualtrics CSV export to compare Brier scores across the three rounds, for each section and combined. The file is read in your browser and never leaves your computer.</p>
+  </header>
+
+  <section aria-labelledby="h-load">
+    <h2 id="h-load">1. Responses</h2>
+    <div class="panel" style="display:flex;flex-direction:column;gap:12px">
+      <div class="row">
+        <label class="btn primary" for="file">Load CSV file<input id="file" type="file" accept=".csv,text/csv"></label>
+        <button id="pasteToggle" type="button">Paste CSV instead</button>
+        <span id="loadStatus" class="small muted">No file loaded yet.</span>
+      </div>
+      <div id="pasteBox" hidden>
+        <textarea id="paste" placeholder="Paste the CSV exported from Qualtrics (Data &amp; Analysis → Export data → CSV)"></textarea>
+        <div class="row" style="margin-top:8px"><button id="pasteGo" type="button" class="btn primary">Use pasted data</button></div>
+      </div>
+      <div class="small muted">Each student's latest submission counts. Group answers are averaged across the group's members. Sections are assigned by submission time (see <span style="font-family:var(--f-mono)">SECTIONS</span> at the top of the script).</div>
+    </div>
+  </section>
+
+  <div id="emptyState" class="panel empty">Load the Qualtrics export above to see each section's results.</div>
+
+  <div id="report" hidden style="display:flex;flex-direction:column;gap:28px">
+    <nav class="tabs" role="tablist" id="tabs" aria-label="Section"></nav>
+
+    <section aria-labelledby="h-out">
+      <div class="row" style="justify-content:space-between">
+        <h2 id="h-out">2. Outcomes</h2>
+        <span class="small muted" id="resolvedCount"></span>
+      </div>
+      <div class="outcomes" id="outcomes"></div>
+    </section>
+
+    <section aria-labelledby="h-res">
+      <h2 id="h-res">3. Results</h2>
+      <div class="tiles" id="tiles"></div>
+      <div class="panel" id="chartBox"></div>
+      <div class="gaps" id="gaps"></div>
+    </section>
+
+    <section aria-labelledby="h-q">
+      <h2 id="h-q">By question</h2>
+      <p class="small muted" style="margin:0">Average probability of YES in each round, the outcome, and each round's Brier score on that question. Green marks the round that scored best.</p>
+      <div class="scroll"><table id="qtable"></table></div>
+    </section>
+
+    <section aria-labelledby="h-rank">
+      <h2 id="h-rank">Rankings</h2>
+      <div class="two">
+        <div><div class="eyebrow" style="margin-bottom:6px;line-height:2">Groups</div><div class="scroll"><table id="gtable"></table></div></div>
+        <div><div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="eyebrow">Individuals (Round 1)</span><label class="small"><input type="checkbox" id="showNames"> Show names</label></div><div class="scroll"><table id="itable"></table></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* ======================= SETTINGS: edit these as events resolve ======================= */
+
+// Sections, by the time the student STARTED the survey (the StartDate column, in the
+// export's own time zone; Qualtrics exports default to Central time).
+// A response belongs to the first section whose "before" time it is earlier than.
+const SECTIONS = [
+  { id: "s1", name: "Section 1", before: "12:30" },   // started 11:33–11:40 in the export
+  { id: "s2", name: "Section 2", before: "24:00" },   // started 13:16–13:48 in the export
+];
+
+// Outcomes shared by both sections: 1 = Yes, 0 = No, null = not resolved yet.
+const OUTCOMES = [
+  null, // Q1  set per section below
+  null, // Q2  set per section below
+  null, // Q3  Zelda: Ocarina of Time remake Metascore 92+ on Nov 7
+  null, // Q4  Men's basketball beats Bridgewater by 30+
+  null, // Q5  More Williamsburg ballots than the 2022 midterm
+  null, // Q6  Marriage amendment Yes % higher than reproductive amendment Yes %
+  null, // Q7  Godzilla Minus Zero Letterboxd 4.0+
+  null, // Q8  The Cat in the Hat IMDb 6.0+
+  null, // Q9  Rain on Saturday, Nov 7
+  null, // Q10 Zable attendance 8,000+
+];
+
+// Questions that resolved differently in each section (question number: outcome).
+const SECTION_OUTCOMES = {
+  s1: { 1: 1, 2: 1 },   // Q1: 12 offices open (> 10) · Q2: 104 jelly beans (> 100)
+  s2: { 1: 0, 2: 0 },   // Q1: 6 offices open        · Q2: 94 jelly beans
+};
+
+/* ===================================================================================== */
+
+const QUESTIONS = [
+  "More than 10 Miller 3rd-floor offices occupied",
+  "More than 100 jelly beans in the jar",
+  "Zelda remake Metascore 92+",
+  "Men's basketball beats Bridgewater by 30+",
+  "More Williamsburg ballots than 2022 midterm",
+  "Marriage amendment beats reproductive amendment (Yes %)",
+  "Godzilla Minus Zero Letterboxd 4.0+",
+  "The Cat in the Hat IMDb 6.0+",
+  "Rain on Saturday, Nov 7",
+  "Zable attendance 8,000+",
+];
+const NQ = QUESTIONS.length;
+const PER_SECTION = new Set(Object.values(SECTION_OUTCOMES).flatMap(o=>Object.keys(o).map(k=>+k-1)));
+const ROUNDS = [
+  {key:"r1", name:"Individuals", desc:"Average of each student's own score", color:"--bar1", unit:"students"},
+  {key:"crowd", name:"Crowd average", desc:"Round 1 forecasts averaged, then scored", color:"--barc", unit:"students"},
+  {key:"r2", name:"Groups", desc:"Average of group scores, no internet", color:"--bar2", unit:"groups"},
+  {key:"r3", name:"Groups + internet", desc:"Average of group scores with research", color:"--bar3", unit:"groups"},
+];
+
+const state = {
+  recs: [], view: null,
+  shared: OUTCOMES.slice(),
+  bySec: Object.fromEntries(SECTIONS.map(s=>[s.id, Object.fromEntries(Object.entries(SECTION_OUTCOMES[s.id]||{}).map(([q,v])=>[+q-1,v]))])),
+};
+
+/* ---------- CSV ---------- */
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c=='"') q=true;
+    else if(c==','){ row.push(cur); cur=""; }
+    else if(c=='\n'||c=='\r'){ if(c=='\r'&&text[i+1]=='\n') i++; row.push(cur); rows.push(row); row=[]; cur=""; }
+    else cur+=c;
+  }
+  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==""));
+}
+// Students mix formats (0.85, 85, 85%). Decide the scale per block of 10 answers:
+// a "%" sign always means percent; otherwise, if any plain number in the block is above 1,
+// the block is read as percents, else as decimals.
+function parseBlock(cells){
+  const raw = cells.map(c=>{ if(c==null) return null; const t=String(c).trim(); if(t==="") return null;
+    const pct=t.includes("%"); const v=parseFloat(t.replace("%","")); return isFinite(v)?{v,pct}:null; });
+  const asPercent = raw.some(x=>x&&!x.pct&&x.v>1);
+  return raw.map(x=> x ? Math.min(1,Math.max(0,(x.pct||asPercent)? x.v/100 : x.v)) : null);
+}
+const normName = s => String(s||"").trim().replace(/\s+/g," ");
+const normGroup = s => { const t=String(s||"").trim(); const m=t.match(/\d+/); return m? String(+m[0]) : t.toLowerCase(); };
+function sectionOf(start){
+  const m = String(start||"").match(/(\d{1,2}):(\d{2})/); if(!m) return SECTIONS[0].id;
+  const hm = m[1].padStart(2,"0")+":"+m[2];
+  const s = SECTIONS.find(s=> hm < s.before.padStart(5,"0")); return (s||SECTIONS[SECTIONS.length-1]).id;
+}
+
+function load(text){
+  const t = parseCSV(text);
+  if(t.length<2) throw new Error("The file has no response rows.");
+  const h = t[0].map(x=>x.trim());
+  const find = re => h.findIndex(x=>re.test(x));
+  const iName=find(/^name$/i), iGroup=find(/^group/i), iStart=find(/^startdate$/i), iRec=find(/^(recordeddate|enddate)$/i);
+  const cols = {r1:Array(NQ).fill(-1), r2:Array(NQ).fill(-1), r3:Array(NQ).fill(-1)};
+  h.forEach((x,i)=>{ const m = x.match(/^\s*R([123])_(\d{1,2})\s*$/i) || x.match(/^\s*R(?:ound)?\s*([123])\D*?Q\s*(\d{1,2})\b/i);
+    if(m){ const q=+m[2]; if(q>=1&&q<=NQ) cols["r"+m[1]][q-1]=i; } });
+  if(Object.values(cols).every(a=>a.every(v=>v<0))) throw new Error('No answer columns found. Expected R1_1 … R3_10 from the Qualtrics survey.');
+  if(iName<0) throw new Error('No "Name" column found.');
+
+  // One row per submission; skip Qualtrics' extra header rows (they have no numeric answers).
+  let subs = t.slice(1).map((r,ix)=>({
+    name: normName(r[iName]), group: normGroup(iGroup>=0?r[iGroup]:""),
+    sec: sectionOf(iStart>=0?r[iStart]:""), when: (iRec>=0?r[iRec]:"")||"", order: ix,
+    blocks: { r1: parseBlock(cols.r1.map(i=>i<0?null:r[i])), r2: parseBlock(cols.r2.map(i=>i<0?null:r[i])), r3: parseBlock(cols.r3.map(i=>i<0?null:r[i])) },
+  })).filter(s=> s.name && Object.values(s.blocks).some(b=>b.some(p=>p!=null)));
+
+  // Duplicates: keep each student's latest submission.
+  const latest = new Map();
+  subs.forEach(s=>{ const k=s.name.toLowerCase(); const p=latest.get(k);
+    if(!p || s.when>p.when || (s.when===p.when && s.order>p.order)) latest.set(k,s); });
+  const dropped = subs.length - latest.size;
+  subs = [...latest.values()].sort((a,b)=>a.order-b.order);
+
+  const recs=[];
+  subs.forEach(s=>["r1","r2","r3"].forEach(k=>{ if(s.blocks[k].some(p=>p!=null)) recs.push({name:s.name, group:s.group, sec:s.sec, round:k, ps:s.blocks[k], order:s.order}); }));
+  return { recs, nStudents: subs.length, dropped };
+}
+
+/* ---------- scoring ---------- */
+const mean = a => { const b=a.filter(x=>x!=null&&isFinite(x)); return b.length? b.reduce((x,y)=>x+y,0)/b.length : null; };
+const wmean = pairs => { let s=0,w=0; pairs.forEach(([v,n])=>{ if(v!=null){ s+=v*n; w+=n; } }); return w? s/w : null; };
+const oc = (sec,i) => PER_SECTION.has(i) ? (state.bySec[sec]?.[i] ?? null) : state.shared[i];
+const sq = (p,o) => (p==null||o==null) ? null : (p-o)**2;
+const brier = (ps,sec) => mean(ps.map((p,i)=>sq(p,oc(sec,i))));
+
+function groupsOf(recs, round){
+  const m=new Map();
+  recs.filter(r=>r.round===round).forEach(r=>{ const k=r.sec+"|"+r.group; if(!m.has(k)) m.set(k,[]); m.get(k).push(r); });
+  return [...m.values()].map(list=>({ sec:list[0].sec, group:list[0].group, n:list.length, ps:[...Array(NQ)].map((_,i)=>mean(list.map(r=>r.ps[i]))) }));
+}
+function compute(view){
+  const recs = view==="all" ? state.recs : state.recs.filter(r=>r.sec===view);
+  const ind = recs.filter(r=>r.round==="r1"), g2=groupsOf(recs,"r2"), g3=groupsOf(recs,"r3");
+  const secs = [...new Set(ind.map(r=>r.sec))];
+  const crowd = secs.map(s=>{ const a=ind.filter(r=>r.sec===s); return { sec:s, n:a.length, ps:[...Array(NQ)].map((_,i)=>mean(a.map(r=>r.ps[i]))) }; });
+  const ents = {r1:ind, r2:g2, r3:g3};
+  const total = {
+    r1: mean(ind.map(r=>brier(r.ps,r.sec))),
+    crowd: wmean(crowd.map(c=>[brier(c.ps,c.sec),c.n])),
+    r2: mean(g2.map(g=>brier(g.ps,g.sec))),
+    r3: mean(g3.map(g=>brier(g.ps,g.sec))),
+  };
+  const q = [...Array(NQ)].map((_,i)=>({
+    r1: mean(ind.map(r=>sq(r.ps[i],oc(r.sec,i)))),
+    crowd: wmean(crowd.map(c=>[sq(c.ps[i],oc(c.sec,i)),c.n])),
+    r2: mean(g2.map(g=>sq(g.ps[i],oc(g.sec,i)))),
+    r3: mean(g3.map(g=>sq(g.ps[i],oc(g.sec,i)))),
+  }));
+  const avg = k => [...Array(NQ)].map((_,i)=>mean(ents[k].map(e=>e.ps[i])));
+  return { ind, g2, g3, secs, total, q, avg:{r1:avg("r1"), r2:avg("r2"), r3:avg("r3")} };
+}
+
+/* ---------- render ---------- */
+const $=id=>document.getElementById(id);
+const f3=v=> v==null? "—" : v.toFixed(3);
+const pct=v=> v==null? "—" : Math.round(v*100)+"%";
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const secName = id => (SECTIONS.find(s=>s.id===id)||{name:id}).name;
+const yn = v => v==null ? "not yet" : v ? "Yes" : "No";
+
+function renderTabs(){
+  const present = SECTIONS.filter(s=>state.recs.some(r=>r.sec===s.id));
+  const tabs = present.map(s=>({id:s.id, name:s.name, n:new Set(state.recs.filter(r=>r.sec===s.id).map(r=>r.name)).size}));
+  if(present.length>1) tabs.push({id:"all", name:"Combined", n:new Set(state.recs.map(r=>r.name)).size});
+  if(!tabs.some(t=>t.id===state.view)) state.view = tabs[0]?.id ?? null;
+  $("tabs").innerHTML = tabs.map(t=>`<button type="button" role="tab" class="tab" id="tab-${t.id}" aria-selected="${t.id===state.view}">${esc(t.name)}<span class="n">${t.n}</span></button>`).join("");
+  tabs.forEach(t=>{ $("tab-"+t.id).onclick=()=>{ state.view=t.id; renderAll(); }; });
+}
+
+function outcomeLabel(i,view){
+  if(!PER_SECTION.has(i) || view!=="all") return null;
+  return SECTIONS.filter(s=>state.recs.some(r=>r.sec===s.id)).map(s=>`${s.name}: ${yn(oc(s.id,i))}`).join(" · ");
+}
+function renderOutcomes(){
+  const view=state.view, box=$("outcomes"); box.innerHTML="";
+  let resolved=0;
+  QUESTIONS.forEach((q,i)=>{
+    const d=document.createElement("div"); d.className="oc";
+    const lbl = outcomeLabel(i,view);
+    if(lbl){
+      d.innerHTML=`<div class="q"><b>Q${i+1}</b>${esc(q)}</div><div class="note">${esc(lbl)}</div>`;
+      if(SECTIONS.every(s=>!state.recs.some(r=>r.sec===s.id) || oc(s.id,i)!=null)) resolved++;
+    } else {
+      const cur = PER_SECTION.has(i) ? oc(view,i) : state.shared[i];
+      if(cur!=null) resolved++;
+      d.innerHTML=`<div class="q"><b>Q${i+1}</b>${esc(q)}${PER_SECTION.has(i)?` <span class="muted small">(${esc(secName(view))})</span>`:""}</div><div class="seg" role="group" aria-label="Outcome for question ${i+1}">
+        <button type="button" class="y">Yes</button><button type="button" class="n">No</button><button type="button" class="u" title="Not resolved yet">?</button></div>`;
+      [["y",1],["n",0],["u",null]].forEach(([k,v])=>{
+        const b=d.querySelector("button."+k); b.setAttribute("aria-pressed", String(cur===v));
+        b.onclick=()=>{ if(PER_SECTION.has(i)) state.bySec[view][i]=v; else state.shared[i]=v; renderAll(); };
+      });
+    }
+    box.appendChild(d);
+  });
+  $("resolvedCount").textContent = `${resolved} of ${NQ} resolved · clicks here are temporary; edit OUTCOMES in the file to keep them`;
+}
+
+function renderResults(){
+  const view=state.view, c=compute(view), t=c.total;
+  const counts={r1:c.ind.length, crowd:c.ind.length, r2:c.g2.length, r3:c.g3.length};
+  $("tiles").innerHTML = ROUNDS.map(r=>`<div class="tile"><div class="k"><span class="sw" style="background:var(${r.color})"></span>${r.name}</div>
+     <div class="v">${f3(t[r.key])}</div><div class="d">${r.desc} · ${counts[r.key]} ${r.unit}</div></div>`).join("");
+
+  const vals=ROUNDS.map(r=>t[r.key]);
+  if(vals.every(v=>v==null)){
+    $("chartBox").innerHTML=`<div class="empty">Brier scores appear once at least one outcome is marked. Lower is better; 0.25 is what a 50% guess always scores.</div>`;
+  } else {
+    const W=640,rowH=34,top=18,left=150,right=64,H=top+ROUNDS.length*rowH+30;
+    const maxV=Math.max(0.3,...vals.filter(v=>v!=null))*1.08; const x=v=>left+(W-left-right)*v/maxV;
+    let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Average Brier score by round">`;
+    [0,0.1,0.2,0.3,0.4].filter(v=>v<=maxV).forEach(v=>{ s+=`<line x1="${x(v)}" x2="${x(v)}" y1="${top-4}" y2="${top+ROUNDS.length*rowH}" stroke="var(--line)"/><text x="${x(v)}" y="${H-8}" font-size="11" text-anchor="middle" style="fill:var(--muted)">${v.toFixed(1)}</text>`; });
+    const c25=x(0.25); s+=`<line x1="${c25}" x2="${c25}" y1="${top-6}" y2="${top+ROUNDS.length*rowH}" stroke="var(--gold)" stroke-dasharray="4 3" stroke-width="1.5"/><text x="${c25}" y="${top-8}" font-size="10" text-anchor="middle" style="fill:var(--gold)">50% guess</text>`;
+    ROUNDS.forEach((r,i)=>{ const v=t[r.key], y=top+i*rowH;
+      s+=`<text x="${left-10}" y="${y+rowH/2+4}" font-size="13" text-anchor="end">${r.name}</text>`;
+      if(v!=null){ s+=`<rect x="${left}" y="${y+6}" width="${Math.max(1,x(v)-left)}" height="${rowH-12}" rx="3" fill="var(${r.color})"/><rect x="${x(v)+3}" y="${y+9}" width="48" height="${rowH-18}" rx="3" fill="var(--surface)"/><text x="${x(v)+6}" y="${y+rowH/2+4}" font-size="12" style="font-family:var(--f-mono)">${v.toFixed(3)}</text>`; }
+    });
+    s+=`</svg><div class="small muted" style="margin-top:6px">Average Brier score over the resolved questions. Lower is better.</div>`;
+    $("chartBox").innerHTML=s;
+  }
+  const gap=(a,b)=> (a==null||b==null)?null:a-b;
+  const g=[
+    ["Aggregation", gap(t.r1,t.crowd), "Individuals − crowd average. Averaging forecasts can never score worse than the average student."],
+    ["Discussion", gap(t.r1,t.r2), "Individuals − groups. Includes both averaging and what group members told each other."],
+    ["Value of information", gap(t.r2,t.r3), "Groups − groups with internet. Same people and questions; only information was added."],
+  ];
+  $("gaps").innerHTML=g.map(([k,v,d])=>`<div class="gap"><div class="eyebrow">${k}</div><div class="v">${v==null?"—":(v>=0?"−":"+")+Math.abs(v).toFixed(3)}</div><div class="small muted">${v==null?"":v>=0?"Brier improved by this much. ":"Brier got worse by this much. "}${d}</div></div>`).join("");
+
+  let h=`<thead><tr><th class="l">Question</th><th>R1 avg p</th><th>Group p</th><th>Internet p</th><th>Outcome</th><th>Individuals</th><th>Crowd</th><th>Groups</th><th>+ Internet</th></tr></thead><tbody>`;
+  QUESTIONS.forEach((q,i)=>{
+    const qs=c.q[i], keys=["r1","crowd","r2","r3"];
+    const valid=keys.map(k=>qs[k]).filter(v=>v!=null); const best=valid.length?Math.min(...valid):null;
+    let out;
+    if(PER_SECTION.has(i) && view==="all"){
+      const vs=[...new Set(c.secs.map(s=>oc(s,i)))];
+      out = vs.length===1 ? (vs[0]==null?'<span class="muted">—</span>':vs[0]?'<span class="res-y">Yes</span>':'<span class="res-n">No</span>') : '<span class="res-v" title="Resolved differently by section">Varies</span>';
+    } else { const o = PER_SECTION.has(i) ? oc(view,i) : state.shared[i]; out = o==null?'<span class="muted">—</span>':o?'<span class="res-y">Yes</span>':'<span class="res-n">No</span>'; }
+    h+=`<tr><td class="l"><span class="muted" style="font-family:var(--f-mono)">Q${i+1}</span> ${esc(q)}</td>
+      <td class="num">${pct(c.avg.r1[i])}</td><td class="num">${pct(c.avg.r2[i])}</td><td class="num">${pct(c.avg.r3[i])}</td><td>${out}</td>
+      ${keys.map(k=>`<td class="num ${qs[k]!=null&&qs[k]===best?"best":""}">${f3(qs[k])}</td>`).join("")}</tr>`;
+  });
+  $("qtable").innerHTML=h+"</tbody>";
+
+  const both = view==="all";
+  const gk = g => g.sec+"|"+g.group;
+  const ids=[...new Map([...c.g2,...c.g3].map(g=>[gk(g),g])).values()];
+  const grows=ids.map(g=>{ const a=c.g2.find(x=>gk(x)===gk(g)), b=c.g3.find(x=>gk(x)===gk(g));
+      return { label:`Group ${g.group}`+(both?` · ${secName(g.sec)}`:""), a:a?brier(a.ps,a.sec):null, b:b?brier(b.ps,b.sec):null }; })
+    .sort((x,y)=>((x.b??x.a)??9)-((y.b??y.a)??9));
+  $("gtable").innerHTML=`<thead><tr><th class="l">Group</th><th>Groups</th><th>+ Internet</th><th>Change</th></tr></thead><tbody>`+
+    (grows.length? grows.map(r=>`<tr><td class="l">${esc(r.label)}</td><td class="num">${f3(r.a)}</td><td class="num">${r.b==null?'<span class="muted" title="No Round 3 answers">—</span>':f3(r.b)}</td><td class="num">${r.a!=null&&r.b!=null?((r.b<=r.a?"−":"+")+Math.abs(r.a-r.b).toFixed(3)):"—"}</td></tr>`).join("")
+      : `<tr><td class="l muted" colspan="4">No group answers.</td></tr>`)+"</tbody>";
+
+  const show=$("showNames").checked;
+  const irows=c.ind.slice().sort((x,y)=>x.order-y.order).map((r,k)=>({n: show ? r.name : "Student "+(k+1), g:r.group, s:r.sec, b:brier(r.ps,r.sec)}))
+    .sort((x,y)=>(x.b??9)-(y.b??9));
+  $("itable").innerHTML=`<thead><tr><th>#</th><th class="l">Student</th>${both?"<th>Section</th>":""}<th>Group</th><th>Brier</th></tr></thead><tbody>`+
+    (irows.length? irows.map((r,i)=>`<tr><td class="num">${i+1}</td><td class="l">${esc(r.n)}</td>${both?`<td>${esc(secName(r.s).replace("Section ","S"))}</td>`:""}<td>${esc(r.g)}</td><td class="num">${f3(r.b)}</td></tr>`).join("")
+      : `<tr><td class="l muted" colspan="5">No individual answers.</td></tr>`)+"</tbody>";
+}
+
+function renderAll(){ renderTabs(); renderOutcomes(); renderResults(); }
+
+function loadText(text, label){
+  try{
+    const res = load(text);
+    state.recs = res.recs; state.view = null;
+    const secs = SECTIONS.filter(s=>res.recs.some(r=>r.sec===s.id)).map(s=>{
+      const st=new Set(res.recs.filter(r=>r.sec===s.id).map(r=>r.name)).size;
+      const gr=new Set(res.recs.filter(r=>r.sec===s.id&&r.round!=="r1").map(r=>r.group)).size;
+      return `${s.name}: ${st} students, ${gr} groups`; });
+    $("loadStatus").textContent = `${label} · ${secs.join(" · ")}` + (res.dropped?` · ${res.dropped} duplicate submission${res.dropped>1?"s":""} ignored (latest kept)`:"");
+    $("loadStatus").classList.remove("err");
+    $("emptyState").hidden = true; $("report").hidden = false;
+    renderAll();
+    try{ sessionStorage.setItem("fs-csv", text); sessionStorage.setItem("fs-label", label); }catch(e){}
+  }catch(e){ $("loadStatus").textContent="Could not read that file. "+e.message; $("loadStatus").classList.add("err"); }
+}
+$("file").addEventListener("change", e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>loadText(String(rd.result), f.name); rd.readAsText(f); e.target.value=""; });
+$("pasteToggle").onclick=()=>{ $("pasteBox").hidden=!$("pasteBox").hidden; };
+$("pasteGo").onclick=()=>{ const t=$("paste").value; if(t.trim()){ loadText(t,"Pasted data"); $("pasteBox").hidden=true; } };
+$("showNames").onchange=()=>renderResults();
+
+try{ const s=sessionStorage.getItem("fs-csv"); if(s) loadText(s, sessionStorage.getItem("fs-label")||"Restored"); }catch(e){}
+</script>
+</body>
+</html>
