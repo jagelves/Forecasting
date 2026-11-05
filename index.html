@@ -133,6 +133,7 @@ svg text{fill:var(--fg);font-family:var(--f-body)}
 
     <section aria-labelledby="h-rank">
       <h2 id="h-rank">Rankings</h2>
+      <div class="panel" id="histBox"></div>
       <div class="two">
         <div><div class="eyebrow" style="margin-bottom:6px;line-height:2">Groups</div><div class="scroll"><table id="gtable"></table></div></div>
         <div><div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="eyebrow">Individuals (Round 1)</span><label class="small"><input type="checkbox" id="showNames"> Show names</label></div><div class="scroll"><table id="itable"></table></div></div>
@@ -158,8 +159,8 @@ const OUTCOMES = [
   null, // Q2  set per section below
   null, // Q3  Zelda: Ocarina of Time remake Metascore 92+ on Nov 7
   null, // Q4  Men's basketball beats Bridgewater by 30+
-  null, // Q5  More Williamsburg ballots than the 2022 midterm
-  null, // Q6  Marriage amendment Yes % higher than reproductive amendment Yes %
+  1,    // Q5  More Williamsburg ballots than the 2022 midterm: YES (6,243+ vs 4,744)
+  0,    // Q6  Marriage amendment Yes % higher than reproductive amendment Yes %: NO (56.5% vs 61.5%)
   null, // Q7  Godzilla Minus Zero Letterboxd 4.0+
   null, // Q8  The Cat in the Hat IMDb 6.0+
   null, // Q9  Rain on Saturday, Nov 7
@@ -364,6 +365,7 @@ function renderResults(){
     s+=`</svg><div class="small muted" style="margin-top:6px">Average Brier score over the resolved questions. Lower is better.</div>`;
     $("chartBox").innerHTML=s;
   }
+  renderHist(c);
   const gap=(a,b)=> (a==null||b==null)?null:a-b;
   const g=[
     ["Aggregation", gap(t.r1,t.crowd), "Individuals − crowd average. Averaging forecasts can never score worse than the average student."],
@@ -394,7 +396,7 @@ function renderResults(){
       return { label:`Group ${g.group}`+(both?` · ${secName(g.sec)}`:""), a:a?brier(a.ps,a.sec):null, b:b?brier(b.ps,b.sec):null }; })
     .sort((x,y)=>((x.b??x.a)??9)-((y.b??y.a)??9));
   $("gtable").innerHTML=`<thead><tr><th class="l">Group</th><th>Groups</th><th>+ Internet</th><th>Change</th></tr></thead><tbody>`+
-    (grows.length? grows.map(r=>`<tr><td class="l">${esc(r.label)}</td><td class="num">${f3(r.a)}</td><td class="num">${r.b==null?'<span class="muted" title="No Round 3 answers">—</span>':f3(r.b)}</td><td class="num">${r.a!=null&&r.b!=null?((r.b<=r.a?"−":"+")+Math.abs(r.a-r.b).toFixed(3)):"—"}</td></tr>`).join("")
+    (grows.length? grows.map(r=>`<tr><td class="l">${esc(r.label)}</td><td class="num">${f3(r.a)}</td><td class="num">${r.b==null?'<span class="muted" title="No Round 3 answers">—</span>':f3(r.b)}</td><td class="num">${r.a!=null&&r.b!=null?(Math.abs(r.a-r.b)<0.0005?"0.000":(r.b<r.a?"−":"+")+Math.abs(r.a-r.b).toFixed(3)):"—"}</td></tr>`).join("")
       : `<tr><td class="l muted" colspan="4">No group answers.</td></tr>`)+"</tbody>";
 
   const show=$("showNames").checked;
@@ -405,6 +407,28 @@ function renderResults(){
       : `<tr><td class="l muted" colspan="5">No individual answers.</td></tr>`)+"</tbody>";
 }
 
+// Histogram: each student's own Brier score, with the crowd average and the average group marked.
+function renderHist(c){
+  const box=$("histBox"), t=c.total;
+  const ib=c.ind.map(r=>brier(r.ps,r.sec)).filter(v=>v!=null);
+  if(!ib.length){ box.innerHTML=`<div class="empty">The histogram of student scores appears once outcomes are marked.</div>`; return; }
+  const w=0.05, hi=Math.max(0.6, Math.ceil(Math.max(...ib, t.r2??0, t.r3??0)/w)*w);
+  const nb=Math.round(hi/w), counts=Array(nb).fill(0); ib.forEach(v=>{ counts[Math.min(nb-1,Math.floor(v/w+1e-9))]++; });
+  const beat=t.crowd==null?0:ib.filter(v=>v>t.crowd).length;
+  const W=640,H=270,left=40,right=16,y0=64,base=220, maxC=Math.max(...counts,1);
+  const x=v=>left+(W-left-right)*v/hi, bw=(W-left-right)/nb, y=n=>base-(base-y0-18)*n/maxC;
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Distribution of individual Brier scores">`;
+  s+=`<text x="${left}" y="18" font-size="14" font-weight="600">The crowd average beats ${beat} of ${ib.length} students</text>`;
+  counts.forEach((n,i)=>{ if(!n) return; s+=`<rect x="${x(i*w)+1}" y="${y(n)}" width="${bw-2}" height="${base-y(n)}" rx="2" fill="var(--bar1)"><title>${n} student${n>1?"s":""} scored ${(i*w).toFixed(2)}–${((i+1)*w).toFixed(2)}</title></rect><text x="${x(i*w)+bw/2}" y="${y(n)-4}" font-size="11" text-anchor="middle" style="fill:var(--muted)">${n}</text>`; });
+  s+=`<line x1="${left}" x2="${W-right}" y1="${base}" y2="${base}" stroke="var(--line)"/>`;
+  for(let v=0; v<=hi+1e-9; v+=0.1) s+=`<text x="${x(v)}" y="${base+16}" font-size="11" text-anchor="middle" style="fill:var(--muted)">${v.toFixed(1)}</text>`;
+  s+=`<text x="${left}" y="${base+34}" font-size="11" style="fill:var(--muted)">Each student's Brier score (lower is better)</text>`;
+  const mark=(v,color,label,row)=>{ if(v==null) return ""; const X=x(v), ly=36+row*14; return `<line x1="${X}" x2="${X}" y1="${ly+4}" y2="${base}" stroke="${color}" stroke-width="2" stroke-dasharray="${row?'4 3':''}"/><text x="${X+4}" y="${ly}" font-size="11" style="fill:${color}">${label} ${v.toFixed(3)}</text>`; };
+  s+=mark(t.crowd,"var(--gold)","Crowd average",0);
+  s+=mark(t.r2,"var(--bar2)","Average group",1);
+  s+=`</svg><div class="small muted" style="margin-top:6px">Students to the right of the gold line did worse than the class's averaged forecast. ${t.r1!=null?`The average student scored ${t.r1.toFixed(3)}.`:""}</div>`;
+  box.innerHTML=s;
+}
 function renderAll(){ renderTabs(); renderOutcomes(); renderResults(); }
 
 function loadText(text, label){
