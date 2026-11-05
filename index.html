@@ -70,6 +70,10 @@ th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);whit
 th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:var(--bg)}
 td.l,th.l{text-align:left;white-space:normal;min-width:170px}
 td.num{font-family:var(--f-mono)}
+tr.grp th{background:var(--surface);border-bottom:0;padding-bottom:0}
+th.gh{text-align:center;color:var(--fg);letter-spacing:.06em;border-bottom:2px solid var(--line)}
+th .thsub{text-transform:none;letter-spacing:0;font-weight:400}
+th.sep,td.sep{border-right:1px solid var(--line)}
 tr:last-child td{border-bottom:0}
 .best{color:var(--accent);font-weight:700}
 .res-y{color:var(--yes);font-weight:700}.res-n{color:var(--no);font-weight:700}.res-v{color:var(--gold);font-weight:600}
@@ -127,7 +131,7 @@ svg text{fill:var(--fg);font-family:var(--f-body)}
 
     <section aria-labelledby="h-q">
       <h2 id="h-q">By question</h2>
-      <p class="small muted" style="margin:0">Average probability of YES in each round, the outcome, and each round's Brier score on that question. Green marks the round that scored best.</p>
+      <p class="small muted" style="margin:0">Left: the average probability of YES in each round (R1 individuals on their own, R2 groups, R3 groups with the internet). Middle: polarization and the outcome. Right: each round's Brier score; green marks the best. "Members → group" compares each group with its own members: how far they sat from 50% in Round 1, and how far the group's agreed answer sat.</p>
       <div class="scroll"><table id="qtable"></table></div>
     </section>
 
@@ -295,7 +299,12 @@ function compute(view){
     r3: mean(g3.map(g=>sq(g.ps[i],oc(g.sec,i)))),
   }));
   const avg = k => [...Array(NQ)].map((_,i)=>mean(ents[k].map(e=>e.ps[i])));
-  return { ind, g2, g3, secs, total, q, avg:{r1:avg("r1"), r2:avg("r2"), r3:avg("r3")} };
+  // Polarization: for each group, how far its Round 1 members' average sat from 50%, and how far its agreed Round 2 answer sat.
+  const polar = [...Array(NQ)].map((_,i)=>{ const dm=[], dg=[];
+    g2.forEach(g=>{ const ps=ind.filter(r=>r.sec===g.sec&&r.group===g.group).map(r=>r.ps[i]).filter(p=>p!=null);
+      if(ps.length<2 || g.ps[i]==null) return; dm.push(Math.abs(mean(ps)-0.5)); dg.push(Math.abs(g.ps[i]-0.5)); });
+    return { members: mean(dm), group: mean(dg) }; });
+  return { ind, g2, g3, secs, total, q, polar, avg:{r1:avg("r1"), r2:avg("r2"), r3:avg("r3")} };
 }
 
 /* ---------- render ---------- */
@@ -374,7 +383,11 @@ function renderResults(){
   ];
   $("gaps").innerHTML=g.map(([k,v,d])=>`<div class="gap"><div class="eyebrow">${k}</div><div class="v">${v==null?"—":(v>=0?"−":"+")+Math.abs(v).toFixed(3)}</div><div class="small muted">${v==null?"":v>=0?"Brier improved by this much. ":"Brier got worse by this much. "}${d}</div></div>`).join("");
 
-  let h=`<thead><tr><th class="l">Question</th><th>R1 avg p</th><th>Group p</th><th>Internet p</th><th>Outcome</th><th>Individuals</th><th>Crowd</th><th>Groups</th><th>+ Internet</th></tr></thead><tbody>`;
+  const sub = t => `<br><span class="thsub">${t}</span>`;
+  let h=`<thead><tr class="grp"><th></th><th colspan="3" class="gh">Probability of YES (average)</th><th class="gh">Polarization</th><th class="gh">Outcome</th><th colspan="4" class="gh">Brier score (lower is better)</th></tr>
+    <tr><th class="l">Question</th><th>R1${sub("Individuals")}</th><th>R2${sub("Groups")}</th><th class="sep">R3${sub("+ Internet")}</th>
+    <th class="sep" title="Average distance from 50%: each group's members in Round 1 → that group's agreed answer. A bigger second number means discussion made the group more extreme than its own members.">Members → group${sub("pts from 50%")}</th>
+    <th class="sep"></th><th>R1${sub("Individuals")}</th><th>R1${sub("Crowd")}</th><th>R2${sub("Groups")}</th><th>R3${sub("+ Internet")}</th></tr></thead><tbody>`;
   QUESTIONS.forEach((q,i)=>{
     const qs=c.q[i], keys=["r1","crowd","r2","r3"];
     const valid=keys.map(k=>qs[k]).filter(v=>v!=null); const best=valid.length?Math.min(...valid):null;
@@ -384,7 +397,7 @@ function renderResults(){
       out = vs.length===1 ? (vs[0]==null?'<span class="muted">—</span>':vs[0]?'<span class="res-y">Yes</span>':'<span class="res-n">No</span>') : '<span class="res-v" title="Resolved differently by section">Varies</span>';
     } else { const o = PER_SECTION.has(i) ? oc(view,i) : state.shared[i]; out = o==null?'<span class="muted">—</span>':o?'<span class="res-y">Yes</span>':'<span class="res-n">No</span>'; }
     h+=`<tr><td class="l"><span class="muted" style="font-family:var(--f-mono)">Q${i+1}</span> ${esc(q)}</td>
-      <td class="num">${pct(c.avg.r1[i])}</td><td class="num">${pct(c.avg.r2[i])}</td><td class="num">${pct(c.avg.r3[i])}</td><td>${out}</td>
+      <td class="num">${pct(c.avg.r1[i])}</td><td class="num">${pct(c.avg.r2[i])}</td><td class="num sep">${pct(c.avg.r3[i])}</td><td class="num sep">${c.polar[i].members==null?"—":`${Math.round(c.polar[i].members*100)} → <b>${Math.round(c.polar[i].group*100)}</b>`}</td><td class="sep">${out}</td>
       ${keys.map(k=>`<td class="num ${qs[k]!=null&&qs[k]===best?"best":""}">${f3(qs[k])}</td>`).join("")}</tr>`;
   });
   $("qtable").innerHTML=h+"</tbody>";
