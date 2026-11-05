@@ -135,9 +135,9 @@ svg text{fill:var(--fg);font-family:var(--f-body)}
       <div class="scroll"><table id="qtable"></table></div>
     </section>
 
-    <section aria-labelledby="h-cal">
+    <section aria-labelledby="h-cal" id="calSection" hidden>
       <h2 id="h-cal">Calibration</h2>
-      <p class="small muted" style="margin:0">Each forecast on a resolved question, grouped by what it said (0–20%, 20–40% …), against how often those events actually happened. On the dashed line, forecasts were well calibrated; below it, people were too confident in Yes; above it, too confident in No. Bigger dots hold more forecasts.</p>
+      <p class="small muted" style="margin:0">When the class said 70%, did it happen 70% of the time? How to read it is under the chart.</p>
       <div class="panel" id="calBox"></div>
     </section>
 
@@ -176,6 +176,9 @@ const OUTCOMES = [
   null, // Q9  Rain on Saturday, Nov 7
   null, // Q10 Zable attendance 8,000+
 ];
+
+// Calibration chart: off for week 1 (too few questions to read reliably). Set to true for the week 2 report.
+const SHOW_CALIBRATION = false;
 
 // Questions that resolved differently in each section (question number: outcome).
 const SECTION_OUTCOMES = {
@@ -381,7 +384,8 @@ function renderResults(){
     $("chartBox").innerHTML=s;
   }
   renderHist(c);
-  renderCalib(c);
+  $("calSection").hidden = !SHOW_CALIBRATION;
+  if(SHOW_CALIBRATION) renderCalib(c);
   const gap=(a,b)=> (a==null||b==null)?null:a-b;
   const g=[
     ["Aggregation", gap(t.r1,t.crowd), "Individuals − crowd average. Averaging forecasts can never score worse than the average student."],
@@ -428,6 +432,7 @@ function renderResults(){
 }
 
 // Calibration: forecasts on resolved questions, binned by probability, vs how often they came true.
+const calShow = { r1:true, r2:false, r3:false };   // start with one line; click the legend to add the others
 function renderCalib(c){
   const box=$("calBox");
   const sets=[
@@ -451,14 +456,25 @@ function renderCalib(c){
     <text x="${X(v)}" y="${base+16}" font-size="11" text-anchor="middle" style="fill:var(--muted)">${Math.round(v*100)}%</text><text x="${left-8}" y="${Y(v)+4}" font-size="11" text-anchor="end" style="fill:var(--muted)">${Math.round(v*100)}%</text>`; });
   s+=`<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}" stroke="var(--gold)" stroke-dasharray="5 4" stroke-width="1.5"/>`;
   s+=`<text x="${X(0.62)}" y="${Y(0.62)-8}" font-size="11" style="fill:var(--gold)" transform="rotate(${-Math.atan(ph/pw)*180/Math.PI} ${X(0.62)} ${Y(0.62)-8})">Perfect calibration</text>`;
-  series.forEach(r=>{ if(r.pts.length>1) s+=`<polyline fill="none" stroke="${r.color}" stroke-width="2" ${r.dash?`stroke-dasharray="${r.dash}"`:""} points="${r.pts.map(p=>`${X(p.x)},${Y(p.y)}`).join(" ")}"/>`;
+  series.filter(r=>calShow[r.key]).forEach(r=>{ if(r.pts.length>1) s+=`<polyline fill="none" stroke="${r.color}" stroke-width="2" ${r.dash?`stroke-dasharray="${r.dash}"`:""} points="${r.pts.map(p=>`${X(p.x)},${Y(p.y)}`).join(" ")}"/>`;
     r.pts.forEach(p=>{ const rad=Math.min(11,3+Math.sqrt(p.n)); s+=`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${rad}" fill="${r.color}" stroke="var(--surface)" stroke-width="1.5"><title>${r.name}: ${p.n} forecasts between ${Math.round(p.lo*100)}% and ${Math.round(p.hi*100)}% (average ${Math.round(p.x*100)}%) came true ${Math.round(p.y*100)}% of the time</title></circle>`; }); });
   s+=`<text x="${left+pw/2}" y="${base+36}" font-size="12" text-anchor="middle" style="fill:var(--muted)">What the forecast said (probability of YES)</text>`;
   s+=`<text x="16" y="${y0+ph/2}" font-size="12" text-anchor="middle" style="fill:var(--muted)" transform="rotate(-90 16 ${y0+ph/2})">How often it happened</text>`;
-  series.forEach((r,k)=>{ const ly=y0+10+k*42, n=r.pts.reduce((a,p)=>a+p.n,0);
-    s+=`<line x1="${left+pw+12}" x2="${left+pw+32}" y1="${ly}" y2="${ly}" stroke="${r.color}" stroke-width="2" ${r.dash?`stroke-dasharray="${r.dash}"`:""}/><circle cx="${left+pw+22}" cy="${ly}" r="5" fill="${r.color}"/><text x="${left+pw+40}" y="${ly+4}" font-size="12">${r.name}</text><text x="${left+pw+40}" y="${ly+19}" font-size="10" style="fill:var(--muted)">${n} forecasts</text>`; });
-  s+=`</svg><div class="small muted" style="margin-top:6px">Hover a dot for its count. With few questions resolved, dots with small counts can sit far from the line by chance.</div>`;
+  series.forEach((r,k)=>{ const ly=y0+10+k*42, n=r.pts.reduce((a,p)=>a+p.n,0), on=calShow[r.key];
+    s+=`<g data-cal="${r.key}" role="button" tabindex="0" aria-pressed="${on}" style="cursor:pointer;opacity:${on?1:0.35}"><rect x="${left+pw+6}" y="${ly-14}" width="${W-left-pw-8}" height="38" fill="transparent"/><line x1="${left+pw+12}" x2="${left+pw+32}" y1="${ly}" y2="${ly}" stroke="${r.color}" stroke-width="2" ${r.dash?`stroke-dasharray="${r.dash}"`:""}/><circle cx="${left+pw+22}" cy="${ly}" r="5" fill="${r.color}"/><text x="${left+pw+40}" y="${ly+4}" font-size="12">${r.name}</text><text x="${left+pw+40}" y="${ly+19}" font-size="10" style="fill:var(--muted)">${n} forecasts</text></g>`; });
+  s+=`</svg>
+  <div class="small" style="margin-top:8px;display:grid;gap:6px;max-width:72ch">
+    <div><b style="color:var(--gold)">Orange dashed line: perfect calibration.</b> If forecasts mean what they say, things called 20% happen 20% of the time, things called 80% happen 80% of the time, and every dot sits on this line.</div>
+    <div><b>Each dot</b> is a bucket of forecasts. Its left–right position is what those forecasts said on average (say 75%); its height is how often those events actually happened (say 45%). Bigger dots hold more forecasts; hover one for its count.</div>
+    <div><b>Each line</b> joins one round's dots. A dot <b>below</b> the orange line means that round said Yes too confidently; <b>above</b> it, No too confidently. A <b>flat</b> line means the forecasts didn't separate what happened from what didn't.</div>
+    <div class="muted">Click a round in the legend to show or hide it. With few questions resolved, small dots can sit far from the line by chance.</div>
+  </div>`;
   box.innerHTML=s;
+  box.querySelectorAll("[data-cal]").forEach(el=>{
+    const flip=()=>{ calShow[el.dataset.cal]=!calShow[el.dataset.cal]; renderCalib(c); };
+    el.addEventListener("click", flip);
+    el.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } });
+  });
 }
 // Histogram: each student's own Brier score, with the crowd average and the average group marked.
 function renderHist(c){
