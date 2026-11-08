@@ -81,6 +81,13 @@ tr:last-child td{border-bottom:0}
 .two>div{min-width:0}
 svg text{fill:var(--fg);font-family:var(--f-body)}
 .empty{padding:28px 16px;color:var(--muted);text-align:center}
+.me-find{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.me-find input[type=text]{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:7px;padding:7px 10px;min-width:220px}
+.recs{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.recs li{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:10px 14px}
+.recs li b{display:block;margin-bottom:2px}
+.tiles.me5{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
+.good{color:var(--yes);font-weight:600}.bad{color:var(--no);font-weight:600}
 .err{color:var(--no)}
 @media (prefers-reduced-motion:no-preference){button{transition:border-color .15s}}
 </style>
@@ -127,6 +134,19 @@ svg text{fill:var(--fg);font-family:var(--f-body)}
       <div class="tiles" id="tiles"></div>
       <div class="panel" id="chartBox"></div>
       <div class="gaps" id="gaps"></div>
+    </section>
+
+    <section aria-labelledby="h-me">
+      <h2 id="h-me">4. How did you do?</h2>
+      <div class="panel" style="display:flex;flex-direction:column;gap:16px">
+        <form class="me-find" id="meForm" autocomplete="off">
+          <label for="meName" class="small">Your last name</label>
+          <input type="text" id="meName" placeholder="e.g. Smith">
+          <button type="submit" class="btn primary">Look up</button>
+          <span id="meMsg" class="small muted"></span>
+        </form>
+        <div id="meOut" hidden style="display:flex;flex-direction:column;gap:16px"></div>
+      </div>
     </section>
 
     <section aria-labelledby="h-q">
@@ -498,12 +518,96 @@ function renderHist(c){
   s+=`</svg><div class="small muted" style="margin-top:6px">Students to the right of the gold line did worse than the class's averaged forecast. ${t.r1!=null?`The average student scored ${t.r1.toFixed(3)}.`:""}</div>`;
   box.innerHTML=s;
 }
-function renderAll(){ renderTabs(); renderOutcomes(); renderResults(); }
+
+/* ---------- How did you do? ---------- */
+state.me = null;
+const signed = v => (v>=0?"+":"−")+Math.abs(v).toFixed(3);
+function findMe(q){
+  q=q.trim().toLowerCase(); if(!q) return [];
+  const names=[...new Map(state.recs.map(r=>[r.name.toLowerCase(), r])).values()];
+  const last = names.filter(r=>{ const t=r.name.toLowerCase().split(" "); return t[t.length-1]===q; });
+  if(last.length) return last;
+  return names.filter(r=>r.name.toLowerCase().split(" ").some(t=>t.startsWith(q)) || r.name.toLowerCase().includes(q));
+}
+function renderMe(){
+  const out=$("meOut");
+  if(!state.me){ out.hidden=true; return; }
+  const me=state.recs.find(r=>r.name.toLowerCase()===state.me && r.round==="r1");
+  if(!me){ out.hidden=true; $("meMsg").textContent="No Round 1 answers found for that name."; return; }
+  const sec=me.sec, cs=compute(sec), ca=compute("all");
+  const g2=cs.g2.find(g=>g.group===me.group), g3=cs.g3.find(g=>g.group===me.group);
+  const crowd=cs.avg.r1;
+  const res=[...Array(NQ).keys()].filter(i=>oc(sec,i)!=null && me.ps[i]!=null);
+  const B=brier(me.ps,sec);
+  const sb=cs.ind.map(r=>brier(r.ps,r.sec)).filter(v=>v!=null);
+  const ab=ca.ind.map(r=>brier(r.ps,r.sec)).filter(v=>v!=null);
+  const crowdB=brier(crowd,sec);
+  const half=brier(me.ps.map(p=>p==null?null:0.5+(p-0.5)/2),sec);
+  const fifty=res.length?0.25:null;
+  const B2=g2?brier(g2.ps,sec):null, B3=g3?brier(g3.ps,sec):null;
+  if(B==null){ out.hidden=false; out.innerHTML=`<div class="empty">Scores appear once outcomes are marked.</div>`; return; }
+  const rank=1+sb.filter(v=>v<B-1e-9).length;
+  const pctl=Math.round(100*ab.filter(v=>v>B+1e-9).length/Math.max(1,ab.length-1));
+
+  const tiles=[
+    ["Your Brier score", B.toFixed(3), `Round 1, on your own · ${res.length} questions`],
+    ["Rank in "+secName(sec), `${rank} of ${sb.length}`, "1 = best score in your section"],
+    ["Percentile", `${pctl}th`, `You beat ${pctl}% of all ${ab.length} students`],
+    ["vs. 50% on everything", signed(B-fifty), B<=fifty?"You beat the know-nothing guess (0.250)":"Writing 50% on every question would have scored better (0.250)"],
+    ["vs. class average", signed(B-crowdB), B<=crowdB?`You beat your section's averaged forecast (${crowdB.toFixed(3)})`:`Your section's averaged forecast did better (${crowdB.toFixed(3)})`],
+  ];
+  const tileHtml=`<div class="tiles me5">${tiles.map(([k,v,d],i)=>`<div class="tile"><div class="k">${k}</div><div class="v ${i>=3?(v.startsWith("−")?"good":"bad"):""}">${v}</div><div class="d">${d}</div></div>`).join("")}</div>`;
+
+  const yn2=o=>o==null?'<span class="muted">—</span>':o?'<span class="res-y">Yes</span>':'<span class="res-n">No</span>';
+  let rows="";
+  for(let i=0;i<NQ;i++){ const o=oc(sec,i), p=me.ps[i], b=sq(p,o); const wrong = o!=null&&p!=null&&p!==0.5&&((p>0.5)!==(o===1));
+    rows+=`<tr><td class="l"><span class="muted" style="font-family:var(--f-mono)">Q${i+1}</span> ${esc(QUESTIONS[i])}</td>
+      <td class="num ${wrong?"bad":""}">${pct(p)}</td><td class="num">${pct(g2?.ps[i])}</td><td class="num">${pct(g3?.ps[i])}</td><td class="num sep">${pct(crowd[i])}</td>
+      <td class="sep">${yn2(o)}</td><td class="num">${f3(b)}</td><td class="num ${b==null?"":b<=0.25?"good":"bad"}">${b==null?"—":signed(b-0.25)}</td></tr>`; }
+  const table=`<div class="scroll"><table><thead><tr class="grp"><th></th><th colspan="4" class="gh">Probability of YES</th><th></th><th colspan="2" class="gh">Your Round 1 score</th></tr>
+    <tr><th class="l">Question</th><th>You${'<br><span class="thsub">R1</span>'}</th><th>Team${'<br><span class="thsub">R2</span>'}</th><th>Team${'<br><span class="thsub">R3 + internet</span>'}</th><th class="sep">Class${'<br><span class="thsub">R1 average</span>'}</th><th class="sep">Outcome</th><th>Brier</th><th>vs. 50%${'<br><span class="thsub">− is better</span>'}</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <div class="small muted">Red forecasts were on the wrong side of 50%. "vs. 50%" compares each of your scores with 0.250, what a 50% guess always scores.</div>`;
+
+  // Diagnostics → recommendations
+  const qn=a=>a.map(i=>"Q"+(i+1)).join(", ");
+  const confMiss=res.filter(i=>Math.abs(me.ps[i]-0.5)>=0.3 && (me.ps[i]>0.5)!==(oc(sec,i)===1));
+  const leaned=res.filter(i=>me.ps[i]!==0.5), wrongSide=leaned.filter(i=>(me.ps[i]>0.5)!==(oc(sec,i)===1));
+  const nearHalf=res.filter(i=>Math.abs(me.ps[i]-0.5)<=0.1);
+  const worst=res.slice().sort((a,b)=>sq(me.ps[b],oc(sec,b))-sq(me.ps[a],oc(sec,a)))[0];
+  const recs=[];
+  if(half!=null && half<B-0.005) recs.push({w:1,t:"Pull your numbers toward 50%",d:`Moving every answer halfway to 50% would have scored ${half.toFixed(3)} instead of ${B.toFixed(3)}.${confMiss.length?` You were 80%+ sure and wrong on ${qn(confMiss)}.`:""} Next week, use numbers beyond 80% or below 20% only when you can name the evidence.`});
+  else if(half!=null && half>B+0.005 && nearHalf.length>=3) recs.push({t:"Commit when you have a reason",d:`Your leans were mostly right, but ${nearHalf.length} answers sat within 10 points of 50%. When the base rate and your evidence agree, move further from 50%.`});
+  if(leaned.length && wrongSide.length/leaned.length>=0.5) recs.push({w:1,t:"Start from the base rate",d:`You leaned the wrong way on ${wrongSide.length} of ${leaned.length} questions. In Round 1, fill in the base-rate box first (how often does this kind of thing happen?) and move away from it only for a specific reason.`});
+  if(B>crowdB) recs.push({w:1,t:"Use other people's forecasts",d:`Your section's averaged forecast scored ${crowdB.toFixed(3)}, better than your ${B.toFixed(3)}. In Round 2, listen to the round-robin, then let your private number move partway toward what you heard. A second estimate of your own, made assuming your first was wrong, also helps when averaged in.`});
+  else recs.push({t:"Your independent view is worth protecting",d:`You beat your section's averaged forecast (${crowdB.toFixed(3)}). Write your Round 1 number before anyone talks, and say it out loud in the round-robin so it reaches your team.`});
+  if(B2!=null && B2>B+0.02) recs.push({w:1,t:"Hold your ground in Round 2",d:`Your team's agreed answers scored ${B2.toFixed(3)}, worse than you did alone. Write your Private number before the team settles on one, and don't let the most confident voice set the team's number. Agreement is not evidence.`});
+  else if(B2!=null && B2<B-0.02) recs.push({t:"Your team helped you",d:`Your team's answers scored ${B2.toFixed(3)}, better than your ${B.toFixed(3)}. In Round 2, ask who knows the most about each question and weigh their reasons.`});
+  if(B2!=null && B3!=null && B3>B2+0.02) recs.push({w:1,t:"Search for facts, not stories",d:`Research made your team's score worse (${B2.toFixed(3)} → ${B3.toFixed(3)}). In Round 3, look up hard numbers and base rates (forecasts, past results), not opinions or hype, and move in steps rather than all at once.`});
+  else if(B2!=null && B3!=null && B3<B2-0.02) recs.push({t:"Keep looking for hard data",d:`Research improved your team's score (${B2.toFixed(3)} → ${B3.toFixed(3)}). Keep searching for numbers that actually separate Yes from No, and note which source helped.`});
+  recs.sort((a,b)=>(b.w||0)-(a.w||0));
+  const top=recs.slice(0,4);
+  const worstLine = worst!=null ? `<div class="small"><b>Your costliest forecast:</b> Q${worst+1} ${esc(QUESTIONS[worst])}. You said ${pct(me.ps[worst])}, the outcome was ${oc(sec,worst)?"Yes":"No"} (Brier ${sq(me.ps[worst],oc(sec,worst)).toFixed(3)}). What would you have needed to know to get it right?</div>` : "";
+  const recHtml=`<div><div class="eyebrow" style="margin-bottom:8px">Recommendations for Week 2</div><ol class="recs">${top.map(r=>`<li><b>${esc(r.t)}</b><span class="small">${esc(r.d)}</span></li>`).join("")}</ol></div>${worstLine}`;
+
+  out.hidden=false;
+  out.innerHTML=`<div class="row" style="justify-content:space-between"><div><div style="font-weight:700;font-size:1.05rem">${esc(me.name)}</div><div class="small muted">${esc(secName(sec))} · Team ${esc(me.group)}</div></div><button type="button" id="meClear">Clear</button></div>${tileHtml}${recHtml}${table}`;
+  $("meClear").onclick=()=>{ state.me=null; $("meName").value=""; $("meMsg").textContent=""; renderMe(); };
+}
+$("meForm").addEventListener("submit", e=>{ e.preventDefault();
+  const m=findMe($("meName").value), msg=$("meMsg");
+  if(!m.length){ state.me=null; msg.textContent="No match. Try your last name as you typed it in the survey."; renderMe(); return; }
+  if(m.length===1){ state.me=m[0].name.toLowerCase(); msg.textContent=""; renderMe(); return; }
+  state.me=null; renderMe();
+  msg.innerHTML="More than one match: "+m.map(r=>`<button type="button" data-me="${esc(r.name.toLowerCase())}">${esc(r.name)}</button>`).join(" ");
+  msg.querySelectorAll("[data-me]").forEach(b=>b.onclick=()=>{ state.me=b.dataset.me; msg.textContent=""; renderMe(); });
+});
+function renderAll(){ renderTabs(); renderOutcomes(); renderResults(); renderMe(); }
 
 function loadText(text, label){
   try{
     const res = load(text);
-    state.recs = res.recs; state.view = null;
+    state.recs = res.recs; state.view = null; state.me = null;
     const secs = SECTIONS.filter(s=>res.recs.some(r=>r.sec===s.id)).map(s=>{
       const st=new Set(res.recs.filter(r=>r.sec===s.id).map(r=>r.name)).size;
       const gr=new Set(res.recs.filter(r=>r.sec===s.id&&r.round!=="r1").map(r=>r.group)).size;
