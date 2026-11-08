@@ -139,12 +139,12 @@ svg text{fill:var(--fg);font-family:var(--f-body)}
     <section aria-labelledby="h-me">
       <h2 id="h-me">4. How did you do?</h2>
       <div class="panel" style="display:flex;flex-direction:column;gap:16px">
-        <form class="me-find" id="meForm" autocomplete="off">
+        <div class="me-find" id="meForm" role="search">
           <label for="meName" class="small">Your last name</label>
-          <input type="text" id="meName" placeholder="e.g. Smith">
-          <button type="submit" class="btn primary">Look up</button>
+          <input type="text" id="meName" placeholder="e.g. Smith" autocomplete="off">
+          <button type="button" class="btn primary" id="meGo">Look up</button>
           <span id="meMsg" class="small muted"></span>
-        </form>
+        </div>
         <div id="meOut" hidden style="display:flex;flex-direction:column;gap:16px"></div>
       </div>
     </section>
@@ -594,14 +594,18 @@ function renderMe(){
   out.innerHTML=`<div class="row" style="justify-content:space-between"><div><div style="font-weight:700;font-size:1.05rem">${esc(me.name)}</div><div class="small muted">${esc(secName(sec))} · Team ${esc(me.group)}</div></div><button type="button" id="meClear">Clear</button></div>${tileHtml}${recHtml}${table}`;
   $("meClear").onclick=()=>{ state.me=null; $("meName").value=""; $("meMsg").textContent=""; renderMe(); };
 }
-$("meForm").addEventListener("submit", e=>{ e.preventDefault();
+function meLookup(){
   const m=findMe($("meName").value), msg=$("meMsg");
-  if(!m.length){ state.me=null; msg.textContent="No match. Try your last name as you typed it in the survey."; renderMe(); return; }
+  if(!$("meName").value.trim()){ msg.textContent="Type your last name first."; return; }
+  if(!state.recs.length){ msg.textContent="Load the CSV file first."; return; }
+  if(!m.length){ state.me=null; msg.textContent="No match. Try your first name, or your name as you typed it in the survey."; renderMe(); return; }
   if(m.length===1){ state.me=m[0].name.toLowerCase(); msg.textContent=""; renderMe(); return; }
   state.me=null; renderMe();
   msg.innerHTML="More than one match: "+m.map(r=>`<button type="button" data-me="${esc(r.name.toLowerCase())}">${esc(r.name)}</button>`).join(" ");
   msg.querySelectorAll("[data-me]").forEach(b=>b.onclick=()=>{ state.me=b.dataset.me; msg.textContent=""; renderMe(); });
-});
+}
+$("meGo").addEventListener("click", meLookup);
+$("meName").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); meLookup(); } });
 function renderAll(){ renderTabs(); renderOutcomes(); renderResults(); renderMe(); }
 
 function loadText(text, label){
